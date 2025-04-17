@@ -1,0 +1,174 @@
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222 71% 28%; /* Yale Blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 45 89% 66%; /* Naples Yellow */
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 172 53% 44%; /* Persian Green */
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 222 71% 18%; /* Darker Yale Blue */
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 45 89% 66%; /* Naples Yellow */
+    --sidebar-primary-foreground: 222 71% 28%; /* Yale Blue */
+    --sidebar-accent: 172 53% 35%; /* Darker Persian Green */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 222 40% 30%;
+    --sidebar-ring: 45 89% 66%; /* Naples Yellow */
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 45 89% 66%; /* Naples Yellow in dark mode */
+    --primary-foreground: 222 71% 28%; /* Yale Blue */
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 172 53% 44%; /* Persian Green */
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+
+    --sidebar-background: 222 71% 18%; /* Darker Yale Blue */
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 45 89% 66%; /* Naples Yellow */
+    --sidebar-primary-foreground: 222 71% 28%; /* Yale Blue */
+    --sidebar-accent: 172 53% 35%; /* Darker Persian Green */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 222 40% 30%;
+    --sidebar-ring: 45 89% 66%; /* Naples Yellow */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-poppins;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-montserrat;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-yale-blue to-naples-yellow;
+  }
+
+  .card-shadow {
+    @apply shadow-md hover:shadow-lg transition-shadow duration-300;
+  }
+
+  .btn-primary {
+    @apply bg-yale-blue text-white hover:bg-yale-blue/90 font-medium;
+  }
+
+  .btn-secondary {
+    @apply bg-naples-yellow text-yale-blue hover:bg-naples-yellow/90 font-medium;
+  }
+
+  .btn-accent {
+    @apply bg-persian-green text-white hover:bg-persian-green/90 font-medium;
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes float-delayed {
+  0% {
+    transform: translateY(0px) rotate(12deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(12deg);
+  }
+  100% {
+    transform: translateY(0px) rotate(12deg);
+  }
+}
+
+@keyframes float-more-delayed {
+  0% {
+    transform: translateY(0px) rotate(-12deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(-12deg);
+  }
+  100% {
+    transform: translateY(0px) rotate(-12deg);
+  }
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 10s ease-in-out infinite;
+}
+
+.animate-float-more-delayed {
+  animation: float-more-delayed 12s ease-in-out infinite;
+}
