@@ -1,4 +1,4 @@
-# Blockhome Loan Verse
+# BlockToHome
 
 A modern web application for managing loan-related operations.
 
@@ -28,7 +28,7 @@ Follow these steps to set up and run the project locally:
 git clone <YOUR_GIT_URL>
 
 # Step 2: Navigate to the project directory
-cd blockhome-loan-verse
+cd block-to-home-fe
 
 # Step 3: Install dependencies
 npm install
@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173` by default.
+The application will be available at `http://localhost:8080` by default.
 
 ## Available Scripts
 
@@ -50,7 +50,7 @@ The application will be available at `http://localhost:5173` by default.
 ## Project Structure
 
 ```
-blockhome-loan-verse/
+block-to-home-fe/
 ├── src/                # Source files
 ├── public/            # Static assets
 ├── components/        # React components
