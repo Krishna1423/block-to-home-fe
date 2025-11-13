@@ -2,6 +2,8 @@ import React from "react";
 import { Building, MapPin, DollarSign, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getNFTInstanceUrl } from "@/lib/blockchainExplorer";
+import { getPropertyTokenAddress } from "@/lib/propertyToken";
 
 interface PropertyCardProps {
   id: string;
@@ -15,6 +17,8 @@ interface PropertyCardProps {
   collateralType: "Gold" | "USDT";
   onClick?: () => void;
   className?: string;
+  chainId?: number;
+  contractAddress?: string;
 }
 
 const PropertyCard: React.FC<PropertyCardProps> = ({
@@ -29,7 +33,21 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   collateralType,
   onClick,
   className,
+  chainId,
+  contractAddress,
 }) => {
+  const handleViewDetails = () => {
+    if (onClick) {
+      onClick();
+      return;
+    }
+
+    // If tokenized and we have chainId and contractAddress, navigate to explorer
+    if (tokenized && chainId && contractAddress) {
+      const explorerUrl = getNFTInstanceUrl(chainId, contractAddress, id);
+      window.open(explorerUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
   return (
     <div
       className={cn(
@@ -93,7 +111,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
         )}
 
         <Button
-          onClick={onClick}
+          onClick={handleViewDetails}
           className="w-full bg-bcms-blue hover:bg-bcms-blue/90"
         >
           {tokenized ? "View Details" : "Tokenize Property"}

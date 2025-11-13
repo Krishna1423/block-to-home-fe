@@ -14,12 +14,13 @@ const GetStarted: React.FC = () => {
   const from = location.state?.from?.pathname || "/";
 
   useEffect(() => {
+    // Navigate to protected route if wallet is connected
     if (isConnected) {
       navigate(from);
     }
   }, [isConnected, navigate, from]);
 
-  const handleConnect = async () => {
+  const handleConnect = () => {
     if (!isConnected) {
       connect();
     }
@@ -65,7 +66,7 @@ const GetStarted: React.FC = () => {
             </div>
 
             <div className="text-center">
-              <div className="flex justify-center gap-4">
+              <div className="flex justify-center gap-4 flex-wrap">
                 <Link
                   to="/"
                   className="px-8 py-4 border-2 border-naples-yellow text-naples-yellow hover:bg-naples-yellow/10 font-medium rounded-lg transition-colors flex items-center gap-2"
@@ -73,13 +74,23 @@ const GetStarted: React.FC = () => {
                   Explore Features
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                <button
-                  onClick={handleConnect}
-                  className="px-8 py-4 bg-naples-yellow text-yale-blue hover:bg-naples-yellow/90 font-medium rounded-lg transition-colors flex items-center gap-2"
-                >
-                  {isConnected ? "Connected" : "Connect Wallet"}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                {!isConnected ? (
+                  <button
+                    onClick={handleConnect}
+                    className="px-8 py-4 bg-naples-yellow text-yale-blue hover:bg-naples-yellow/90 font-medium rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    Connect Wallet
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <Link
+                    to={from}
+                    className="px-8 py-4 bg-persian-green text-white hover:bg-persian-green/90 font-medium rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    Go to Dashboard
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                )}
               </div>
             </div>
           </div>

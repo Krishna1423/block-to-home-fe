@@ -2,6 +2,10 @@ import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PropertyTokenizationForm from "@/components/PropertyTokenizationForm";
+import { useTokenizeProperty } from "@/hooks/useTokenizeProperty";
+import { useAccount, useChainId } from "wagmi";
+import { useToast } from "@/components/ui/use-toast";
+import { getExplorerUrl } from "@/lib/blockchainExplorer";
 import {
   Building,
   ListChecks,
@@ -16,6 +20,8 @@ import {
   Download,
   X,
   Check,
+  Loader2,
+  ExternalLink,
 } from "lucide-react";
 
 const PropertyTokenization: React.FC = () => {
@@ -35,8 +41,11 @@ const PropertyTokenization: React.FC = () => {
   const [uploadComplete, setUploadComplete] = useState(false);
   const [deedPreview, setDeedPreview] = useState<string | null>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [isTokenizing, setIsTokenizing] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { toast } = useToast();
+  const { tokenizeProperty, steps, isProcessing, hash, isConfirmed, error } = useTokenizeProperty();
 
   // Function to update form data from the PropertyTokenizationForm component
   const updateFormData = (data: any) => {
@@ -110,7 +119,17 @@ const PropertyTokenization: React.FC = () => {
   }, [showNotification]);
 
   // Handle tokenization process
-  const handleTokenize = () => {
+  const handleTokenize = async () => {
+    // Check wallet connection
+    if (!isConnected || !address) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet to tokenize a property",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Validate all required fields
     if (
       !formData.address ||
@@ -118,26 +137,74 @@ const PropertyTokenization: React.FC = () => {
       !formData.country ||
       !formData.valuation
     ) {
-      // No alert, just return
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required property details",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!formData.deed) {
-      // No alert, just return
+      toast({
+        title: "Document Required",
+        description: "Please upload property deed document",
+        variant: "destructive",
+      });
       return;
     }
 
-    setIsTokenizing(true);
+    try {
+      // Close summary modal
+      setShowSummaryModal(false);
 
-    // Simulate tokenization process
-    setTimeout(() => {
-      setIsTokenizing(false);
-      setShowNotification(true);
-      // No alert, just complete the process
-      // Redirect to dashboard after successful tokenization
-      // window.location.href = '/dashboard';
-    }, 2000);
+      // Start tokenization process
+      await tokenizeProperty({
+        address: formData.address,
+        city: formData.city,
+        country: formData.country,
+        valuation: formData.valuation,
+        tokenizedPortion: formData.tokenizedPortion,
+        tokenizedValue: formData.tokenizedValue,
+        collateralType: formData.collateralType as "USDT" | "Gold",
+        propertyImage: formData.propertyImage as File | null,
+        deed: formData.deed as File | null,
+      });
+    } catch (error) {
+      console.error("Error tokenizing property:", error);
+      toast({
+        title: "Tokenization Failed",
+        description: error instanceof Error ? error.message : "An error occurred during tokenization",
+        variant: "destructive",
+      });
+    }
   };
+
+  // Show success notification when tokenization is confirmed
+  useEffect(() => {
+    if (isConfirmed) {
+      setShowNotification(true);
+      toast({
+        title: "Tokenization Successful!",
+        description: "Your property has been tokenized and recorded on the blockchain",
+      });
+      // Optionally redirect to dashboard after a delay
+      // setTimeout(() => {
+      //   window.location.href = '/dashboard';
+      // }, 3000);
+    }
+  }, [isConfirmed, toast]);
+
+  // Show error notification if tokenization fails
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Tokenization Failed",
+        description: error.message || "An error occurred during tokenization",
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
 
   // Handle showing the summary modal without starting tokenization
   const handleShowSummary = () => {
@@ -484,32 +551,87 @@ const PropertyTokenization: React.FC = () => {
                 </div>
               </div>
 
+              {/* Tokenization Progress Steps */}
+              {steps.length > 0 && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+                  <h4 className="font-medium mb-3">Tokenization Progress</h4>
+                  <div className="space-y-2">
+                    {steps.map((step, index) => (
+                      <div key={index} className="flex items-center text-sm">
+                        {step.status === "completed" && (
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                        )}
+                        {step.status === "processing" && (
+                          <Loader2 className="h-4 w-4 text-blue-500 mr-2 animate-spin" />
+                        )}
+                        {step.status === "error" && (
+                          <X className="h-4 w-4 text-red-500 mr-2" />
+                        )}
+                        {step.status === "pending" && (
+                          <div className="h-4 w-4 rounded-full border-2 border-gray-300 mr-2" />
+                        )}
+                        <span
+                          className={
+                            step.status === "error"
+                              ? "text-red-600"
+                              : step.status === "completed"
+                              ? "text-green-600"
+                              : "text-gray-600"
+                          }
+                        >
+                          {step.step === "uploadImage" && "Uploading property image"}
+                          {step.step === "uploadDeed" && "Uploading property deed"}
+                          {step.step === "createMetadata" && "Creating metadata"}
+                          {step.step === "uploadMetadata" && "Uploading metadata to IPFS"}
+                          {step.step === "mintToken" && "Minting property token"}
+                          {step.message && ` - ${step.message}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {hash && (
+                    <div className="mt-3 p-2 bg-blue-50 rounded text-sm">
+                      <span className="text-blue-600">Transaction Hash: </span>
+                      <a
+                        href={getExplorerUrl(chainId, hash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline flex items-center"
+                      >
+                        {hash.slice(0, 10)}...{hash.slice(-8)}
+                        <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Confirmation Buttons */}
               {isSection3Complete() ? (
                 <div className="flex justify-end space-x-4 mt-6">
                   <button
                     onClick={() => setShowSummaryModal(false)}
-                    className="px-4 py-2 border border-red-300 rounded-md text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                    disabled={isProcessing}
+                    className="px-4 py-2 border border-red-300 rounded-md text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      handleTokenize();
-                      setShowSummaryModal(false);
-                    }}
-                    disabled={isTokenizing || !isFormComplete()}
+                    onClick={handleTokenize}
+                    disabled={isProcessing || !isFormComplete() || !isConnected}
                     className={`px-4 py-2 ${
-                      isFormComplete()
+                      isFormComplete() && isConnected && !isProcessing
                         ? "bg-bcms-blue-light hover:bg-bcms-blue"
                         : "bg-gray-300 cursor-not-allowed"
                     } text-white rounded-md transition-colors flex items-center`}
                   >
-                    {isTokenizing ? (
+                    {isProcessing ? (
                       <>
-                        <span className="mr-2">Processing...</span>
-                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <span>Processing...</span>
                       </>
+                    ) : !isConnected ? (
+                      "Connect Wallet First"
                     ) : (
                       "Confirm & Tokenize"
                     )}
@@ -541,7 +663,20 @@ const PropertyTokenization: React.FC = () => {
       {showNotification && (
         <div className="fixed bottom-6 right-6 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center animate-fade-in-up">
           <Check className="h-5 w-5 mr-2" />
-          <span>Property successfully tokenized!</span>
+          <div className="flex flex-col">
+            <span className="font-medium">Property successfully tokenized!</span>
+            {hash && (
+              <a
+                href={getExplorerUrl(chainId, hash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm underline mt-1 flex items-center"
+              >
+                View transaction
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </a>
+            )}
+          </div>
         </div>
       )}
 

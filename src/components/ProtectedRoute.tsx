@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useWallet } from "@/contexts/WalletContext";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
@@ -24,6 +24,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     }
   }, [isConnected, navigate, location, toast]);
 
+  // Wallet not connected - show loading while redirecting
   if (!isConnected) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-yale-blue/5">
@@ -35,6 +36,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
+  // Wallet connected - render children
   return <>{children}</>;
 };
 

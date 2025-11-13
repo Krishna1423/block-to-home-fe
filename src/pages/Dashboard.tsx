@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,6 +7,9 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PropertyCard from "@/components/PropertyCard";
 import LoanCard from "@/components/LoanCard";
+import { useUserProperties } from "@/hooks/useUserProperties";
+import { useAccount, useChainId } from "wagmi";
+import { getPropertyTokenAddress } from "@/lib/propertyToken";
 import {
   Building,
   Briefcase,
@@ -17,111 +20,10 @@ import {
   Landmark,
   Plus,
   TrendingUp,
+  Loader2,
 } from "lucide-react";
 
-// Mock data for the dashboard
-const mockProperties = [
-  {
-    id: "RET12345",
-    title: "Downtown Apartment",
-    address: "123 Main St, New York",
-    value: "100,000",
-    tokenizedPortion: 50,
-    tokenizedValue: "50,000",
-    imageUrl: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2",
-    tokenized: true,
-    collateralType: "USDT" as const,
-  },
-  {
-    id: "RET12346",
-    title: "Beach House",
-    address: "456 Ocean Dr, Miami",
-    value: "250,000",
-    tokenizedPortion: 75,
-    tokenizedValue: "187,500",
-    imageUrl: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
-    tokenized: true,
-    collateralType: "Gold" as const,
-  },
-  {
-    id: "RET12347",
-    title: "Luxury Flat",
-    address: "78 Kensington High St, London",
-    value: "850,000",
-    tokenizedPortion: 60,
-    tokenizedValue: "510,000",
-    imageUrl: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
-    tokenized: true,
-    collateralType: "USDT" as const,
-  },
-  {
-    id: "RET12348",
-    title: "Modern Apartment",
-    address: "Sultanahmet, Istanbul",
-    value: "320,000",
-    tokenizedPortion: 80,
-    tokenizedValue: "256,000",
-    imageUrl: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688",
-    tokenized: true,
-    collateralType: "Gold" as const,
-  },
-  {
-    id: "RET12349",
-    title: "Palm Jumeirah Villa",
-    address: "Palm Jumeirah, Dubai",
-    value: "1,200,000",
-    tokenizedPortion: 40,
-    tokenizedValue: "480,000",
-    imageUrl: "https://images.unsplash.com/photo-1613977257363-707ba9348227",
-    tokenized: true,
-    collateralType: "USDT" as const,
-  },
-  {
-    id: "RET12350",
-    title: "Lake View Apartment",
-    address: "Seefeld, Zurich",
-    value: "950,000",
-    tokenizedPortion: 70,
-    tokenizedValue: "665,000",
-    imageUrl: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
-    tokenized: true,
-    collateralType: "Gold" as const,
-  },
-  {
-    id: "RET12351",
-    title: "Marina Bay Condo",
-    address: "Marina Bay, Singapore",
-    value: "1,500,000",
-    tokenizedPortion: 55,
-    tokenizedValue: "825,000",
-    imageUrl: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
-    tokenized: true,
-    collateralType: "USDT" as const,
-  },
-  {
-    id: "RET12352",
-    title: "Downtown Toronto Loft",
-    address: "King West, Toronto",
-    value: "750,000",
-    tokenizedPortion: 65,
-    tokenizedValue: "487,500",
-    imageUrl: "https://images.unsplash.com/photo-1515263487990-61b07816b324",
-    tokenized: true,
-    collateralType: "Gold" as const,
-  },
-  {
-    id: "RET12353",
-    title: "Waterfront Condo",
-    address: "False Creek, Vancouver",
-    value: "1,100,000",
-    tokenizedPortion: 45,
-    tokenizedValue: "495,000",
-    imageUrl: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
-    tokenized: true,
-    collateralType: "USDT" as const,
-  },
-];
-
+// Mock data for loans and investments (will be replaced when loan contracts are implemented)
 const mockLoans = [
   {
     id: "00123",
@@ -159,6 +61,30 @@ const mockInvestments = [
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState("assets");
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const contractAddress = getPropertyTokenAddress(chainId);
+  const { properties, isLoading: isLoadingProperties, error: propertiesError } = useUserProperties();
+
+  // Calculate statistics from real property data
+  const stats = useMemo(() => {
+    const totalProperties = properties.length;
+    const totalValue = properties.reduce((sum, prop) => {
+      // Remove commas and parse value
+      const value = parseFloat(prop.value.replace(/,/g, ''));
+      return sum + value;
+    }, 0);
+    const totalTokenizedValue = properties.reduce((sum, prop) => {
+      const value = parseFloat(prop.tokenizedValue.replace(/,/g, ''));
+      return sum + value;
+    }, 0);
+
+    return {
+      totalProperties,
+      totalValue,
+      totalTokenizedValue,
+    };
+  }, [properties]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -184,9 +110,9 @@ const Dashboard: React.FC = () => {
                     <Building className="h-5 w-5 text-bcms-blue-light" />
                   </div>
                 </div>
-                <div className="text-3xl font-bold mb-1">2</div>
+                <div className="text-3xl font-bold mb-1">{stats.totalProperties}</div>
                 <div className="text-sm text-gray-500">
-                  Total Value: 350,000 USDT
+                  Total Value: {stats.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })} USDT
                 </div>
               </CardContent>
             </Card>
@@ -303,10 +229,33 @@ const Dashboard: React.FC = () => {
                 </Link>
               </div>
 
-              {mockProperties.length > 0 ? (
+              {isLoadingProperties ? (
+                <div className="text-center py-12">
+                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-bcms-blue-light mb-4" />
+                  <p className="text-gray-600">Loading your properties...</p>
+                </div>
+              ) : propertiesError ? (
+                <div className="text-center py-12 bg-red-50 rounded-lg">
+                  <p className="text-red-600 mb-2">Error loading properties</p>
+                  <p className="text-sm text-gray-600">{propertiesError.message}</p>
+                </div>
+              ) : properties.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {mockProperties.map((property) => (
-                    <PropertyCard key={property.id} {...property} />
+                  {properties.map((property) => (
+                    <PropertyCard 
+                      key={property.tokenId} 
+                      id={property.tokenId}
+                      title={property.title}
+                      address={property.address}
+                      value={property.value}
+                      tokenizedPortion={property.tokenizedPortion}
+                      tokenizedValue={property.tokenizedValue}
+                      imageUrl={property.imageUrl}
+                      tokenized={property.tokenized}
+                      collateralType={property.collateralType}
+                      chainId={chainId}
+                      contractAddress={contractAddress}
+                    />
                   ))}
                 </div>
               ) : (
