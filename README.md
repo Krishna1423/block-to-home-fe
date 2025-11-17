@@ -11,6 +11,8 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Polkadot Asset Hub
+- Pinata for IPFS
 
 ## Prerequisites
 
@@ -25,15 +27,28 @@ Follow these steps to set up and run the project locally:
 
 ```sh
 # Step 1: Clone the repository
-git clone <YOUR_GIT_URL>
+git clone https://github.com/BlockToHome/block-to-home.git
 
 # Step 2: Navigate to the project directory
-cd block-to-home-fe
+cd block-to-home
 
-# Step 3: Install dependencies
+# Step 3: Environment Variables
+
+# Before running the application, create a `.env` file in the project root directory and add the following variables:
+
+VITE_USDT_CONTRACT_ADDRESS_420420422=0xe6004b1b76E6C385436154552b66Ed415a3dB272
+VITE_PROPERTY_TOKEN_CONTRACT_ADDRESS_420420422=0x5267555B5db130099Fa4Ce4162A1153f3FbeA2EF    
+VITE_LOAN_ESCROW_CONTRACT_ADDRESS_420420422=0xF5B57164698a33ef298F44883c9de54931998E5F       
+VITE_LIQUIDITY_POOL_CONTRACT_ADDRESS_420420422=0x95d7A4b99590Ab961F1BA7029735dDC7C337B8aB    
+VITE_LOAN_CONTRACT_ADDRESS_420420422=0x605E563030387E1aEDA5D6ee4EbB04CC814E9d2a
+
+VITE_PINATA_API_KEY=<pinata_api_key>
+VITE_PINATA_JWT=<pinata_jwt_token>
+
+# Step 4: Install dependencies
 npm install
 
-# Step 4: Start the development server
+# Step 5: Start the development server
 npm run dev
 ```
 
@@ -55,6 +70,7 @@ block-to-home-fe/
 ├── public/            # Static assets
 ├── components/        # React components
 ├── styles/           # CSS and styling files
+├── contracts/        # Solidity contracts
 └── ...
 ```
 
