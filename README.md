@@ -1,6 +1,6 @@
 # BlockToHome
 
-BlockToHome is a blockchain-powered real estate tokenization and collaborative lending platform designed to make property ownership more accessible, transparent, and community-driven. Built on Polkadot Paseo testnet(future it will be moved to mainnet), the platform enables interest-free, peer-to-peer lending and fractional real estate investment backed by stable digital assets.
+BlockToHome is a blockchain-powered real estate tokenization and collaborative lending platform designed to make property ownership more accessible, transparent, and community-driven. Built on Polkadot Paseo testnet(future it will be moved to mainnet), the platform enables interest-free, pool based lending and fractional real estate investment backed by stable digital assets.
 
 BlockToHome transforms real estate into tokenized, fractional digital assets, allowing individuals to invest in property with low entry barriers. Community members can pool funds, support borrowers, and participate in property-backed lending without relying on traditional banks or interest-based financing models. Ownership, fund allocation, and yield distribution are securely managed through smart contracts.
 
@@ -11,6 +11,10 @@ BlockToHome transforms real estate into tokenized, fractional digital assets, al
 - Stable-asset-backed funding (USDT & Gold Token) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # *For testing we are using mock/dummy USDT token that we deployed*
 - Automated and transparent smart contract operations
 - Secure, interoperable, and scalable Polkadot-based architecture
+
+# Demo Video
+[![Video Title](https://img.youtube.com/vi/DGX0W8BYIXo/0.jpg)](https://www.youtube.com/watch?v=DGX0W8BYIXo)
+
 
 ## Technologies Used
 
