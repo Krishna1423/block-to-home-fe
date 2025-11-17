@@ -8,7 +8,7 @@ BlockToHome transforms real estate into tokenized, fractional digital assets, al
 - Tokenized real estate ownership
 - Interest-free peer-to-peer lending
 - Community-driven investment pools
-- Stable-asset-backed funding (USDT & Gold Token) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # For testing we are using mock/dummy USDT token that we deployed
+- Stable-asset-backed funding (USDT & Gold Token) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # *For testing we are using mock/dummy USDT token that we deployed*
 - Automated and transparent smart contract operations
 - Secure, interoperable, and scalable Polkadot-based architecture
 
