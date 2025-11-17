@@ -15,6 +15,7 @@ BlockToHome transforms real estate into tokenized, fractional digital assets, al
 # 🎥 Demo Video
 [![Video Title](https://img.youtube.com/vi/DGX0W8BYIXo/0.jpg)](https://www.youtube.com/watch?v=DGX0W8BYIXo)
 
+**[Click here or the above picture to watch the demo video ▶️](https://www.youtube.com/watch?v=DGX0W8BYIXo)**
 
 ## Technologies Used
 
