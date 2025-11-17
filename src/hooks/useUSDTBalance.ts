@@ -1,3 +1,4 @@
+import React from 'react';
 import { useReadContract, useBalance } from 'wagmi';
 import { formatUSDTBalance, getUSDTAddress, USDT_ABI } from '@/lib/contracts';
 import { useAccount, useChainId } from 'wagmi';
@@ -11,6 +12,18 @@ export const useUSDTBalance = () => {
   const chainId = useChainId();
   const usdtAddress = getUSDTAddress(chainId);
 
+  // Debug logging
+  React.useEffect(() => {
+    if (isConnected && address) {
+      console.log('🔍 USDT Balance Hook Debug:', {
+        chainId,
+        usdtAddress,
+        walletAddress: address,
+        isConnected,
+      });
+    }
+  }, [chainId, usdtAddress, address, isConnected]);
+
   // Get USDT balance if contract address exists for this chain
   const { data: usdtBalance, ...usdtQuery } = useReadContract({
     address: usdtAddress,
@@ -21,6 +34,17 @@ export const useUSDTBalance = () => {
       enabled: isConnected && !!address && !!usdtAddress,
     },
   });
+
+  // Debug balance result
+  React.useEffect(() => {
+    if (usdtBalance !== undefined) {
+      console.log('💰 USDT Balance Result:', {
+        rawBalance: usdtBalance?.toString(),
+        formatted: formatUSDTBalance(usdtBalance as bigint),
+        error: usdtQuery.error,
+      });
+    }
+  }, [usdtBalance, usdtQuery.error]);
 
   // Fallback to native token balance if USDT is not available
   const { data: nativeBalance, ...nativeQuery } = useBalance({

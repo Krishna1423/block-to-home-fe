@@ -145,6 +145,15 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAvailableLoans } from "@/hooks/useLoans";
+import { useFundLoan } from "@/hooks/useFundLoan";
+import { usePoolDeposit } from "@/hooks/usePoolDeposit";
+import { useUSDTBalance } from "@/hooks/useUSDTBalance";
+import { Loader2, AlertCircle } from "lucide-react";
+import { useChainId, useWatchContractEvent, useReadContract, useAccount } from "wagmi";
+import { LOAN_CONTRACT_ABI } from "@/lib/loanContract";
+import { getLiquidityPoolAddress, LIQUIDITY_POOL_ABI } from "@/lib/liquidityPool";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Opportunity {
   loanId: string;
@@ -156,7 +165,7 @@ interface Opportunity {
   tokenizedPortion: number;
   tokenizedValue: string;
   collateralType: "USDT" | "GOLD";
-  status: "OPEN" | "CLOSED" | "PENDING";
+  status: "PENDING" | "OPEN" | "FUNDED" | "ACTIVE" | "COMPLETED" | "DEFAULTED" | "CLOSED";
   funded: number;
   startDate: string;
   endDate: string;
@@ -209,7 +218,172 @@ const InvestorPool = () => {
     }, 2000);
   };
 
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([
+  // Fetch real loans from blockchain
+  const chainId = useChainId();
+  const queryClient = useQueryClient();
+  const { loans: availableLoans, isLoading: isLoadingLoans, error: loansError, refetch: refetchLoans, loanContractAddress } = useAvailableLoans();
+  const { fundLoan, isPending: isFundingLoan, isSuccess: isLoanFunded, hash: fundingHash } = useFundLoan();
+  const { deposit: depositToPool, isPending: isDepositing, isSuccess: isDeposited, hash: depositHash, minDepositAmount } = usePoolDeposit();
+  const { balance: usdtBalance, formattedBalance: usdtFormattedBalance, isLoading: isLoadingBalance } = useUSDTBalance();
+  
+  // Investment amount state (for pool deposit)
+  const [depositAmount, setDepositAmount] = useState<string>("100");
+
+  // Read pool balance and loans funded
+  const liquidityPoolAddress = getLiquidityPoolAddress(chainId);
+  const { data: totalPoolBalanceBigInt, refetch: refetchTotalPoolBalance } = useReadContract({
+    address: liquidityPoolAddress,
+    abi: LIQUIDITY_POOL_ABI,
+    functionName: 'totalPoolBalance',
+    query: {
+      enabled: !!liquidityPoolAddress,
+      refetchInterval: 2000, // Refetch every 2 seconds for faster updates
+      staleTime: 0, // Always consider data stale - force fresh reads
+      gcTime: 0, // Don't cache - always fetch fresh
+    },
+  });
+  const { data: totalLoansFundedBigInt, refetch: refetchTotalLoansFunded } = useReadContract({
+    address: liquidityPoolAddress,
+    abi: LIQUIDITY_POOL_ABI,
+    functionName: 'totalLoansFunded',
+    query: {
+      enabled: !!liquidityPoolAddress,
+      refetchInterval: 2000, // Refetch every 2 seconds for faster updates
+      staleTime: 0, // Always consider data stale - force fresh reads
+      gcTime: 0, // Don't cache - always fetch fresh
+    },
+  });
+  
+  // Calculate available balance = totalPoolBalance - totalLoansFunded
+  const totalPoolBalance = totalPoolBalanceBigInt ? Number(totalPoolBalanceBigInt) / 1e6 : 0; // USDT has 6 decimals
+  const totalLoansFunded = totalLoansFundedBigInt ? Number(totalLoansFundedBigInt) / 1e6 : 0; // USDT has 6 decimals
+  const poolBalance = totalPoolBalance - totalLoansFunded; // Available balance
+
+  // Refetch function that refetches both values
+  const refetchPoolBalance = React.useCallback(() => {
+    refetchTotalPoolBalance();
+    refetchTotalLoansFunded();
+  }, [refetchTotalPoolBalance, refetchTotalLoansFunded]);
+
+  // Debug logging for pool balance
+  React.useEffect(() => {
+    console.log('💧 Pool Balance Update:', {
+      totalPoolBalance: totalPoolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      totalLoansFunded: totalLoansFunded.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      availableBalance: poolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      liquidityPoolAddress,
+      chainId,
+    });
+  }, [totalPoolBalance, totalLoansFunded, poolBalance, liquidityPoolAddress, chainId]);
+
+  // Refetch pool balance when loan is successfully funded
+  React.useEffect(() => {
+    if (isLoanFunded) {
+      console.log('🔄 Loan funded - invalidating pool balance cache');
+      // Invalidate all readContract queries for the liquidity pool (both totalPoolBalance and totalLoansFunded)
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const queryKey = query.queryKey;
+          // Check if this is a readContract query for the liquidity pool
+          if (queryKey[0] !== 'readContract' || !queryKey[1]) return false;
+          const params = queryKey[1] as any;
+          return params?.address?.toLowerCase() === liquidityPoolAddress?.toLowerCase() &&
+                 (params?.functionName === 'totalPoolBalance' || params?.functionName === 'totalLoansFunded');
+        },
+      });
+      // Also manually refetch
+      setTimeout(() => {
+        console.log('🔄 Refetching pool balance (1s delay)');
+        refetchPoolBalance();
+      }, 1000);
+      setTimeout(() => {
+        console.log('🔄 Refetching pool balance (3s delay)');
+        refetchPoolBalance();
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const queryKey = query.queryKey;
+            if (queryKey[0] !== 'readContract' || !queryKey[1]) return false;
+            const params = queryKey[1] as any;
+            return params?.address?.toLowerCase() === liquidityPoolAddress?.toLowerCase() &&
+                   params?.functionName === 'totalPoolBalance';
+          },
+        });
+      }, 3000);
+      setTimeout(() => {
+        console.log('🔄 Refetching pool balance (5s delay)');
+        refetchPoolBalance();
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const queryKey = query.queryKey;
+            if (queryKey[0] !== 'readContract' || !queryKey[1]) return false;
+            const params = queryKey[1] as any;
+            return params?.address?.toLowerCase() === liquidityPoolAddress?.toLowerCase() &&
+                   params?.functionName === 'totalPoolBalance';
+          },
+        });
+      }, 5000);
+    }
+  }, [isLoanFunded, refetchPoolBalance, queryClient, liquidityPoolAddress]);
+
+  // Read user's pool participation
+  const { address: userAddress } = useAccount();
+  const { data: userParticipantData } = useReadContract({
+    address: liquidityPoolAddress,
+    abi: LIQUIDITY_POOL_ABI,
+    functionName: 'getParticipant',
+    args: userAddress ? [userAddress] : undefined,
+    query: {
+      enabled: !!liquidityPoolAddress && !!userAddress,
+      refetchInterval: 5000,
+    },
+  });
+  const userPoolDeposit = userParticipantData ? Number(userParticipantData.totalDeposited) / 1e6 : 0;
+  const userPoolShare = userParticipantData && poolBalance > 0 
+    ? (userPoolDeposit / poolBalance) * 100 
+    : 0;
+
+  // Watch for new loan creation events and refetch when detected
+  useWatchContractEvent({
+    address: loanContractAddress,
+    abi: LOAN_CONTRACT_ABI,
+    eventName: 'LoanRequestCreated',
+    onLogs() {
+      // Refetch loans when a new one is created
+      setTimeout(() => {
+        refetchLoans();
+      }, 2000); // Wait 2 seconds for transaction to be mined
+    },
+  });
+
+  // Watch for loan funding events and refetch when detected
+  useWatchContractEvent({
+    address: loanContractAddress,
+    abi: LOAN_CONTRACT_ABI,
+    eventName: 'LoanFunded',
+    onLogs(logs) {
+      console.log('📢 LoanFunded event detected:', logs);
+      // Refetch loans and pool balance when a loan is funded
+      // Pool balance decreases when loan is funded, so we need to refetch it
+      setTimeout(() => {
+        console.log('🔄 Event listener: Refetching pool balance (2s delay)');
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const queryKey = query.queryKey;
+            if (queryKey[0] !== 'readContract' || !queryKey[1]) return false;
+            const params = queryKey[1] as any;
+            return params?.address?.toLowerCase() === liquidityPoolAddress?.toLowerCase() &&
+                   params?.functionName === 'totalPoolBalance';
+          },
+        });
+        refetchLoans();
+        refetchPoolBalance();
+      }, 2000); // Wait 2 seconds for transaction to be mined
+    },
+  });
+
+  // Mock data (commented out - kept for reference)
+  /*
+  const [mockOpportunities] = useState<Opportunity[]>([
     {
       loanId: "00123",
       borrower: "John Doe",
@@ -471,6 +645,52 @@ const InvestorPool = () => {
       city: "Vancouver",
     },
   ]);
+  */
+
+  // Transform real loans to Opportunity format
+  const opportunities: Opportunity[] = React.useMemo(() => {
+    if (!availableLoans || availableLoans.length === 0) return [];
+
+    return availableLoans.map((loan) => {
+      // Format borrower address (show first 6 and last 4 characters)
+      const borrowerAddress = loan.borrower;
+      const borrowerDisplay = `${borrowerAddress.slice(0, 6)}...${borrowerAddress.slice(-4)}`;
+      
+      // Calculate duration in years (approximate)
+      const durationYears = Math.round(loan.duration / 12);
+      const durationDisplay = durationYears > 0 ? `${durationYears} year${durationYears > 1 ? 's' : ''}` : `${loan.duration} month${loan.duration > 1 ? 's' : ''}`;
+      
+      // Calculate end date (approximate)
+      const startDate = new Date(loan.createdAt * 1000);
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + loan.duration);
+      
+      // Extract country and city from property address if available
+      const addressParts = loan.propertyAddress?.split(',') || [];
+      const city = addressParts.length > 1 ? addressParts[addressParts.length - 2]?.trim() || 'Unknown' : 'Unknown';
+      const country = addressParts.length > 0 ? addressParts[addressParts.length - 1]?.trim() || 'Unknown' : 'Unknown';
+
+      return {
+        loanId: loan.loanId,
+        borrower: borrowerDisplay,
+        amount: `$${loan.loanAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+        interestRate: `${loan.interestRate.toFixed(1)}%`,
+        duration: durationDisplay,
+        propertyValue: loan.propertyValue ? `$${loan.propertyValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'N/A',
+        tokenizedPortion: loan.tokenizedPortion || 0,
+        tokenizedValue: loan.tokenizedValue ? `$${loan.tokenizedValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'N/A',
+        collateralType: (loan.collateralType?.toUpperCase() === 'GOLD' ? 'GOLD' : 'USDT') as 'USDT' | 'GOLD',
+        status: loan.status as "PENDING" | "OPEN" | "FUNDED" | "ACTIVE" | "COMPLETED" | "DEFAULTED" | "CLOSED",
+        funded: loan.fundedPercentage,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        propertyImageUrl: loan.propertyImageUrl || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2',
+        propertyAddress: loan.propertyAddress || 'Address not available',
+        country,
+        city,
+      };
+    });
+  }, [availableLoans]);
 
   const filteredOpportunities = opportunities.filter(
     (opportunity) =>
@@ -631,47 +851,14 @@ const InvestorPool = () => {
     // Update wallet balance
     setBalance(`${newBalance.toLocaleString()} USDT`);
 
-    // Update the funded percentage for the selected opportunity
-    setOpportunities((prevOpportunities) =>
-      prevOpportunities.map((opportunity) => {
-        if (opportunity.loanId === selectedOpportunityForInvestment.loanId) {
-          const loanAmount = parseFloat(
-            opportunity.amount.replace(/[^0-9.-]+/g, "")
-          );
-          const currentFundedAmount = (loanAmount * opportunity.funded) / 100;
-          const newFundedAmount = currentFundedAmount + investmentValue;
-          const newFundedPercentage = Math.min(
-            (newFundedAmount / loanAmount) * 100,
-            100
-          );
-
-          // If the loan is now fully funded, update its status
-          const newStatus =
-            newFundedPercentage >= 100
-              ? ("CLOSED" as const)
-              : ("OPEN" as const);
-
-          // Show notification preference in toast if enabled
-          if (notifyOnFunding) {
-            toast({
-              title: "Notification Preference Saved",
-              description: `You will be notified when loan ${opportunity.loanId} reaches 75% funding.`,
-            });
-          }
-
-          return {
-            ...opportunity,
-            funded: Math.round(newFundedPercentage),
-            status: newStatus,
-          };
-        }
-        return opportunity;
-      })
-    );
-
+    // Note: This is a pool-based funding model
+    // Individual investments are not directly made to loans
+    // Instead, users deposit to the liquidity pool, and loans are funded from the pool
+    // For now, we'll show a message explaining this
     toast({
-      title: "Investment submitted",
-      description: `You have invested $${investmentAmount} in loan ${selectedOpportunityForInvestment.loanId}`,
+      title: "Pool-Based Funding Model",
+      description: "Loans are funded from the liquidity pool. Please deposit to the pool to enable loan funding. Individual loan investments are not supported.",
+      variant: "default",
     });
 
     // Reset notification preference
@@ -683,7 +870,9 @@ const InvestorPool = () => {
   const uniqueCountries = React.useMemo(() => {
     const countries = new Set<string>();
     opportunities.forEach((opportunity) => {
-      countries.add(opportunity.country);
+      if (opportunity.country && opportunity.country !== 'Unknown') {
+        countries.add(opportunity.country);
+      }
     });
     return Array.from(countries).sort();
   }, [opportunities]);
@@ -830,24 +1019,39 @@ const InvestorPool = () => {
           
           <div className="mb-2">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-sm font-medium">Funding Progress</span>
+              <span className="text-sm font-medium">Loan Funding Status</span>
               <span className="text-sm font-medium">{fundedPercentage}%</span>
             </div>
             <Progress value={fundedPercentage} className="h-2" />
+            {poolBalance > 0 && (
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Pool Available:</span>
+                <span className={`font-medium ${
+                  Number(opportunity.amount.replace(/[^0-9.-]+/g, "")) <= poolBalance 
+                    ? 'text-green-600' 
+                    : 'text-orange-600'
+                }`}>
+                  {poolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                </span>
+                {Number(opportunity.amount.replace(/[^0-9.-]+/g, "")) > poolBalance && (
+                  <span className="text-orange-600">⚠️ Insufficient</span>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
         <CardFooter>
           <Button 
             className="w-full" 
-            disabled={opportunity.status !== "OPEN"}
-            variant={opportunity.status === "OPEN" ? "default" : "outline"}
+            disabled={opportunity.status !== "OPEN" && opportunity.status !== "PENDING"}
+            variant={opportunity.status === "OPEN" || opportunity.status === "PENDING" ? "default" : "outline"}
             onClick={() =>
-              opportunity.status === "OPEN" && openInvestModal(opportunity)
+              (opportunity.status === "OPEN" || opportunity.status === "PENDING") && openInvestModal(opportunity)
             }
           >
-            {opportunity.status === "OPEN"
-              ? "Invest Now"
-              : opportunity.status === "CLOSED"
+            {opportunity.status === "OPEN" || opportunity.status === "PENDING"
+              ? "View Details"
+              : opportunity.status === "FUNDED" || opportunity.status === "ACTIVE" || opportunity.status === "COMPLETED" || opportunity.status === "CLOSED"
               ? "Funded"
               : "Pending"}
           </Button>
@@ -920,20 +1124,107 @@ const InvestorPool = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-          {paginatedOpportunities.map(renderOpportunityItem)}
-        </div>
+        {/* Pool Statistics Section */}
+        {liquidityPoolAddress && (
+          <Card className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="text-2xl">💧</span>
+                Liquidity Pool Statistics
+              </CardTitle>
+              <CardDescription>
+                Track the shared liquidity pool that funds all loans
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-lg border border-blue-100">
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Total Pool Balance
+                  </p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {poolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Available for loan funding
+                  </p>
+                </div>
+                {userAddress && userPoolDeposit > 0 && (
+                  <div className="bg-white p-4 rounded-lg border border-blue-100">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                      Your Pool Deposit
+                    </p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {userPoolDeposit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {userPoolShare.toFixed(2)}% of total pool
+                    </p>
+                  </div>
+                )}
+                <div className="bg-white p-4 rounded-lg border border-blue-100">
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Available Loans
+                  </p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {availableLoans?.filter(loan => loan.status === 'OPEN' || loan.status === 'PENDING').length || 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Waiting for funding
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 p-3 bg-blue-100 rounded-md">
+                <p className="text-xs text-blue-900">
+                  <strong>💡 How it works:</strong> The liquidity pool is a shared fund where investors deposit USDT. 
+                  When loans are funded, funds are transferred from the pool to borrowers. 
+                  Pool balance ≠ Loan funding status. A loan shows 0% funded until someone clicks "Fund Loan from Pool" when the pool has enough funds.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        {filteredOpportunities.length === 0 && (
+        {isLoadingLoans ? (
           <div className="text-center py-12">
-            <h3 className="text-xl font-semibold mb-2">
-              No investment opportunities found
-            </h3>
-            <p className="text-muted-foreground mb-8">
-              Try changing your search criteria
-            </p>
-            <Button onClick={() => setFilter("")}>Clear Search</Button>
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-bcms-blue-light mb-4" />
+            <p className="text-gray-600">Loading investment opportunities...</p>
           </div>
+        ) : loansError ? (
+          <div className="text-center py-12 bg-red-50 rounded-lg">
+            <p className="text-red-600 mb-2">Error loading loans</p>
+            <p className="text-sm text-gray-600 mb-2">{loansError.message}</p>
+            {!loanContractAddress && (
+              <p className="text-xs text-gray-500 mt-2">
+                LoanContract address not configured for this chain.
+                <br />
+                Please set VITE_LOAN_CONTRACT_ADDRESS_{chainId} in your .env file.
+              </p>
+            )}
+            <Button onClick={() => refetchLoans()} className="mt-4">Retry</Button>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+              {paginatedOpportunities.map(renderOpportunityItem)}
+            </div>
+
+            {filteredOpportunities.length === 0 && (
+              <div className="text-center py-12">
+                <h3 className="text-xl font-semibold mb-2">
+                  No investment opportunities found
+                </h3>
+                <p className="text-muted-foreground mb-8">
+                  {opportunities.length === 0 
+                    ? "No loans are currently available for investment. Check back later!"
+                    : "Try changing your search criteria"}
+                </p>
+                {opportunities.length > 0 && (
+                  <Button onClick={() => setFilter("")}>Clear Search</Button>
+                )}
+              </div>
+            )}
+          </>
         )}
         
         {filteredOpportunities.length > 0 && (
@@ -995,9 +1286,9 @@ const InvestorPool = () => {
       <Dialog open={isInvestModalOpen} onOpenChange={setIsInvestModalOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Invest in Loan</DialogTitle>
+            <DialogTitle>Loan Funding Information</DialogTitle>
             <DialogDescription>
-              Enter the amount you want to invest in this loan opportunity.
+              This platform uses a pool-based funding model. Loans are funded from the liquidity pool, not through individual investments.
             </DialogDescription>
           </DialogHeader>
 
@@ -1072,89 +1363,264 @@ const InvestorPool = () => {
                 </div>
               </div>
 
-              <div className="bg-muted p-3 rounded-md">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">
-                    Your Wallet Balance:
-                  </span>
-                  <span className="font-semibold">{balance}</span>
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-md">
+                <h3 className="font-medium text-blue-900 mb-2">Pool-Based Funding Model</h3>
+                <p className="text-sm text-blue-800 mb-3">
+                  This platform uses a <strong>pool-based funding model</strong>. Here's how it works:
+                </p>
+                <div className="bg-white p-3 rounded border border-blue-100 mb-3">
+                  <p className="text-xs text-blue-900 font-medium mb-2">📋 Two-Step Process:</p>
+                  <ol className="text-xs text-blue-800 space-y-1 ml-4 list-decimal">
+                    <li><strong>Step 1:</strong> Deposit USDT into the liquidity pool (adds funds to the shared pool)</li>
+                    <li><strong>Step 2:</strong> Fund the loan from the pool (transfers funds from pool to borrower)</li>
+                  </ol>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-700">Loan Amount:</span>
+                    <span className="font-semibold">{selectedOpportunityForInvestment.amount}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-700">Current Pool Balance:</span>
+                    <span className="font-semibold">{poolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-700">Funding Status:</span>
+                    <span className="font-semibold">
+                      {selectedOpportunityForInvestment.funded !== undefined 
+                        ? `${selectedOpportunityForInvestment.funded}% funded`
+                        : 'Not funded'}
+                    </span>
+                  </div>
+                  {poolBalance > 0 && Number(selectedOpportunityForInvestment.amount.replace(/[^0-9.-]+/g, "")) > poolBalance && (
+                    <div className="flex items-start gap-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md mt-2">
+                      <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                      <div className="text-xs text-yellow-800">
+                        <p className="font-medium">Pool balance insufficient</p>
+                        <p className="mt-1">
+                          Pool has {poolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT, 
+                          but loan requires {selectedOpportunityForInvestment.amount}. 
+                          Please deposit more USDT to the pool first.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="deposit-amount">Deposit Amount (USDT)</Label>
+                    <span className="text-xs text-gray-500">
+                      Balance: {isLoadingBalance ? '...' : `${usdtFormattedBalance || '0'} USDT`}
+                    </span>
+                  </div>
+                  <Input
+                    id="deposit-amount"
+                    type="number"
+                    placeholder={`Minimum: ${minDepositAmount} USDT`}
+                    value={depositAmount}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0)) {
+                        setDepositAmount(value);
+                      }
+                    }}
+                    min={minDepositAmount}
+                    step="1"
+                    className="w-full"
+                  />
+                  {depositAmount && Number(depositAmount) < minDepositAmount && (
+                    <p className="text-sm text-red-500">
+                      Minimum deposit is {minDepositAmount} USDT
+                    </p>
+                  )}
+                  {depositAmount && usdtBalance && Number(depositAmount) > Number(usdtFormattedBalance || '0') && (
+                    <div className="flex items-start gap-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                      <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                      <div className="text-sm text-red-800">
+                        <p className="font-medium">Insufficient balance</p>
+                        <p className="text-xs mt-1">
+                          You have {usdtFormattedBalance || '0'} USDT, but need {depositAmount} USDT.
+                          Please mint MockUSDT tokens first.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="investment-amount">Investment Amount ($)</Label>
-                <Input
-                  id="investment-amount"
-                  type="number"
-                  placeholder="Enter amount to invest"
-                  value={investmentAmount}
-                  onChange={handleInvestmentAmountChange}
-                  className={!isAmountValid ? "border-red-500" : ""}
-                />
-                {!isAmountValid && (
-                  <p className="text-sm text-red-500">{amountErrorMessage}</p>
-                )}
-              </div>
+              {(selectedOpportunityForInvestment.status === 'OPEN' || selectedOpportunityForInvestment.status === 'PENDING') && (
+                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
+                  <p className="text-sm text-yellow-800 font-medium mb-1">⚠️ Important:</p>
+                  <p className="text-xs text-yellow-700">
+                    You must complete <strong>both steps</strong> to fund this loan:
+                  </p>
+                  <ol className="text-xs text-yellow-700 mt-2 ml-4 list-decimal space-y-1">
+                    <li>First, deposit USDT to the pool using the "Deposit" button</li>
+                    <li>Then, click "Fund Loan from Pool" to transfer funds from the pool to the borrower</li>
+                  </ol>
+                  <p className="text-xs text-yellow-600 mt-2 italic">
+                    Note: The pool must have enough balance to cover the full loan amount before you can fund it.
+                  </p>
+                </div>
+              )}
 
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="notification-preference"
-                  checked={notifyOnFunding}
-                  onCheckedChange={setNotifyOnFunding}
-                />
-                <Label htmlFor="notification-preference">
-                  Notify me at 75% funding
-                </Label>
-              </div>
-
-              {estimatedReturn > 0 && isAmountValid && (
-                <div className="bg-muted p-4 rounded-md">
-                  <h3 className="font-medium mb-2">Estimated Return</h3>
-                  <div className="flex justify-between">
-                    <span>Principal:</span>
-                    <span>${Number(investmentAmount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Interest:</span>
-                    <span>
-                      $
-                      {(
-                        estimatedReturn - Number(investmentAmount)
-                      ).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between font-bold mt-2 pt-2 border-t">
-                    <span>Total Return:</span>
-                    <span>
-                      $
-                      {estimatedReturn.toLocaleString(undefined, {
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
+              {selectedOpportunityForInvestment.status !== 'OPEN' && selectedOpportunityForInvestment.status !== 'PENDING' && (
+                <div className="bg-gray-50 border border-gray-200 p-3 rounded-md">
+                  <p className="text-sm text-gray-600">
+                    This loan is {selectedOpportunityForInvestment.status.toLowerCase()} and cannot be funded.
+                  </p>
                 </div>
               )}
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
-              onClick={() => setIsInvestModalOpen(false)}
+              onClick={() => {
+                setIsInvestModalOpen(false);
+                setDepositAmount("100"); // Reset on close
+              }}
+              disabled={isFundingLoan || isDepositing}
             >
-              Cancel
+              Close
             </Button>
-            <Button
-              onClick={handleInvestSubmit}
-              disabled={
-                !isAmountValid ||
-                !investmentAmount ||
-                Number(investmentAmount) <= 0
-              }
-            >
-              Confirm Investment
-            </Button>
+            {selectedOpportunityForInvestment && (
+              <>
+                <Button
+                  onClick={async () => {
+                    if (!depositAmount || Number(depositAmount) < minDepositAmount) {
+                      toast({
+                        title: "Invalid amount",
+                        description: `Please enter at least ${minDepositAmount} USDT`,
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    try {
+                      await depositToPool(depositAmount);
+                      // Refetch pool balance and loans after successful deposit
+                      setTimeout(() => {
+                        refetchPoolBalance();
+                        refetchLoans();
+                      }, 2000);
+                    } catch (error) {
+                      console.error('Error depositing to pool:', error);
+                    }
+                  }}
+                  disabled={isDepositing || isFundingLoan || !depositAmount || Number(depositAmount) < minDepositAmount}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isDepositing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Depositing...
+                    </>
+                  ) : (
+                    `Deposit ${depositAmount || '0'} USDT to Pool`
+                  )}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    const loanAmount = Number(selectedOpportunityForInvestment.amount.replace(/[^0-9.-]+/g, ""));
+                    if (poolBalance < loanAmount) {
+                      toast({
+                        title: "Insufficient pool balance",
+                        description: `Pool has ${poolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT, but loan requires ${loanAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT. Please deposit more USDT to the pool first.`,
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    try {
+                      await fundLoan(selectedOpportunityForInvestment.loanId);
+                      // Refetch pool balance and loans after successful funding
+                      // Use multiple timeouts to ensure balance updates (pool balance decreases when loan is funded)
+                      console.log('✅ Fund loan transaction submitted - starting refetch sequence');
+                      setTimeout(() => {
+                        console.log('🔄 Button handler: Refetching pool balance (1s delay)');
+                        queryClient.invalidateQueries({
+                          predicate: (query) => {
+                            const queryKey = query.queryKey;
+          if (queryKey[0] !== 'readContract' || !queryKey[1]) return false;
+          const params = queryKey[1] as any;
+          return params?.address?.toLowerCase() === liquidityPoolAddress?.toLowerCase() &&
+                 params?.functionName === 'totalPoolBalance';
+                          },
+                        });
+                        refetchPoolBalance();
+                        refetchLoans();
+                      }, 1000);
+                      setTimeout(() => {
+                        console.log('🔄 Button handler: Refetching pool balance (3s delay)');
+                        queryClient.invalidateQueries({
+                          predicate: (query) => {
+                            const queryKey = query.queryKey;
+          if (queryKey[0] !== 'readContract' || !queryKey[1]) return false;
+          const params = queryKey[1] as any;
+          return params?.address?.toLowerCase() === liquidityPoolAddress?.toLowerCase() &&
+                 params?.functionName === 'totalPoolBalance';
+                          },
+                        });
+                        refetchPoolBalance();
+                        refetchLoans();
+                        setIsInvestModalOpen(false);
+                        setDepositAmount("100"); // Reset on close
+                      }, 3000);
+                    } catch (error) {
+                      console.error('Error funding loan:', error);
+                    }
+                  }}
+                  disabled={
+                    isFundingLoan || 
+                    isDepositing || 
+                    (selectedOpportunityForInvestment.status !== 'OPEN' && selectedOpportunityForInvestment.status !== 'PENDING') ||
+                    poolBalance < Number(selectedOpportunityForInvestment.amount.replace(/[^0-9.-]+/g, ""))
+                  }
+                  className="bg-bcms-blue hover:bg-bcms-blue/90"
+                >
+                  {isFundingLoan ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Funding Loan...
+                    </>
+                  ) : (
+                    'Fund Loan from Pool'
+                  )}
+                </Button>
+              </>
+            )}
           </DialogFooter>
+          {(depositHash || fundingHash) && (
+            <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-sm text-green-800">
+                <strong>Transaction submitted:</strong> {(depositHash || fundingHash)?.slice(0, 10)}...{(depositHash || fundingHash)?.slice(-8)}
+              </p>
+              {(isDepositing || isFundingLoan) ? (
+                <>
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Waiting for confirmation...
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    If MetaMask shows success but this is still loading, the transaction may be confirmed. Try refreshing the page.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-green-700 mt-1 font-medium">
+                  ✓ Transaction confirmed!
+                </p>
+              )}
+              <a
+                href={`https://polkadot-hub-testnet.subscan.io/extrinsic/${depositHash || fundingHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:underline mt-2 inline-block"
+              >
+                View on Subscan →
+              </a>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

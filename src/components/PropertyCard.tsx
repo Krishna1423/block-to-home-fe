@@ -3,7 +3,7 @@ import { Building, MapPin, DollarSign, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getNFTInstanceUrl } from "@/lib/blockchainExplorer";
-import { getPropertyTokenAddress } from "@/lib/propertyToken";
+import { getPropertyTokenAddress } from "@/lib/contracts";
 
 interface PropertyCardProps {
   id: string;

@@ -42,7 +42,13 @@ export const wagmiConfig = createConfig({
     [polygon.id]: http(),
     [sepolia.id]: http(),
     [polygonAmoy.id]: http(),
-    [polkadotHubTestnet.id]: http(),
+    [polkadotHubTestnet.id]: http(undefined, {
+      batch: {
+        multicall: true,
+      },
+      retryCount: 3,
+      retryDelay: 1000,
+    }),
   },
 });
 

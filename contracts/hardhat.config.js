@@ -20,6 +20,7 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true, // Enable IR-based code generator to handle stack too deep errors
     },
   },
   networks: {
@@ -33,6 +34,7 @@ module.exports = {
       polkavm: true,
       url: "https://testnet-passet-hub-eth-rpc.polkadot.io",
       accounts: vars.has("PRIVATE_KEY") ? [vars.get("PRIVATE_KEY")] : [],
+      chainId: 420420422, // Polkadot Hub Testnet Chain ID
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",

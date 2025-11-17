@@ -68,6 +68,7 @@ contract PropertyToken is ERC721URIStorage, Ownable {
      * @param collateralType Type of collateral ("USDT" or "Gold")
      * @param tokenURI IPFS hash or URI for property metadata
      * @return tokenId The ID of the newly minted token
+     * @notice Users can mint tokens to themselves (to must be msg.sender or owner can mint to anyone)
      */
     function mintPropertyToken(
         address to,
@@ -76,7 +77,12 @@ contract PropertyToken is ERC721URIStorage, Ownable {
         uint256 tokenizedValue,
         string memory collateralType,
         string memory tokenURI
-    ) public onlyOwner returns (uint256) {
+    ) public returns (uint256) {
+        // Allow users to mint to themselves, or owner to mint to anyone
+        require(
+            msg.sender == to || msg.sender == owner(),
+            "PropertyToken: can only mint to yourself or owner can mint to anyone"
+        );
         require(to != address(0), "PropertyToken: cannot mint to zero address");
         require(valuation > 0, "PropertyToken: valuation must be greater than 0");
         require(tokenizedPortion > 0 && tokenizedPortion <= 100, "PropertyToken: tokenized portion must be between 1 and 100");

@@ -12,7 +12,7 @@ interface LoanCardProps {
   duration: string;
   propertyValue: string;
   collateralType: "Gold" | "USDT";
-  status: "OPEN" | "FUNDED" | "COMPLETED";
+  status: "PENDING" | "OPEN" | "FUNDED" | "ACTIVE" | "COMPLETED" | "DEFAULTED";
   funded?: number;
   onClick?: () => void;
   className?: string;
@@ -32,9 +32,12 @@ const LoanCard: React.FC<LoanCardProps> = ({
 }) => {
   // Status colors
   const statusColor = {
+    PENDING: "bg-yellow-100 text-yellow-800",
     OPEN: "bg-green-100 text-green-800",
     FUNDED: "bg-blue-100 text-blue-800",
+    ACTIVE: "bg-purple-100 text-purple-800",
     COMPLETED: "bg-gray-100 text-gray-800",
+    DEFAULTED: "bg-red-100 text-red-800",
   };
 
   return (
@@ -102,7 +105,7 @@ const LoanCard: React.FC<LoanCardProps> = ({
           </div>
         </div>
 
-        {status === "OPEN" && (
+        {(status === "OPEN" || status === "PENDING") && funded !== undefined && (
           <>
             <div className="flex justify-between items-center text-sm mb-2">
               <span>Funding progress</span>
@@ -116,13 +119,13 @@ const LoanCard: React.FC<LoanCardProps> = ({
           onClick={onClick}
           className={cn(
             "w-full",
-            status === "OPEN"
+            status === "OPEN" || status === "PENDING"
               ? "bg-bcms-blue hover:bg-bcms-blue/90"
               : "bg-gray-200 hover:bg-gray-300 text-gray-800"
           )}
-          disabled={status !== "OPEN"}
+          disabled={status !== "OPEN" && status !== "PENDING"}
         >
-          {status === "OPEN" ? "Invest Now" : "View Details"}
+          {status === "OPEN" || status === "PENDING" ? "Invest Now" : "View Details"}
         </Button>
       </div>
     </div>
